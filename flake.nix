@@ -111,6 +111,7 @@
         packages = {
             "lib:simplex-chat" = (drv pkgs).simplex-chat.components.library;
             "exe:simplex-chat" = (drv pkgs).simplex-chat.components.exes.simplex-chat;
+            "exe:upload-bot" = (drv pkgs).simplex-chat.components.exes.simplex-upload-bot;
         } // ({
             "x86_64-linux" =
               let

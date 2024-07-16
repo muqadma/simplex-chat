@@ -40,7 +40,8 @@ import           Prelude
 --
 
 data StorageOpts = StorageOpts
-  { endpoint :: String
+  { bucket :: String
+  , endpoint :: String
   , access_key :: String -- = Access Key obtained from HMAC Key
   , secret :: String --  Secret obtained from HMAC Key
   }
@@ -49,7 +50,8 @@ data StorageOpts = StorageOpts
 -- optparse-applicative package based command-line parsing.
 storageOpts :: Parser StorageOpts
 storageOpts = StorageOpts
-              <$> (strArgument (metavar "MINIO_STORAGE_API" <> help "the endpoint to GCS or a MinIO server"))
+              <$> (strArgument (metavar "MINIO_BUCKET" <> help "the bucket name on GCS or a MinIO server"))
+              <*> (strArgument (metavar "MINIO_STORAGE_API" <> help "the endpoint to GCS or a MinIO server"))
               <*> (strArgument (metavar "MINIO_ACCESS_KEY" <> help "the hmac-key-derived access key to GCS or a MinIO server"))
               <*> (strArgument (metavar "MINIO_SECRET" <> help "the hmac-key-derived secret for the access key to GCS or a MinIO server"))
 
