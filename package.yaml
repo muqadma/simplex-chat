@@ -108,6 +108,9 @@ executables:
     main: Main.hs
     dependencies:
       - simplex-chat
+      - minio-hs
+    other-modules:
+      - Minio
     ghc-options:
       - -threaded
 

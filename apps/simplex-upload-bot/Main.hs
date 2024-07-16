@@ -1,3 +1,10 @@
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
+
+
 module Main where
 
 import Control.Concurrent.Async
@@ -15,24 +22,31 @@ import Simplex.Chat.Types
 import System.Directory (getAppUserDataDirectory)
 import Text.Read
 
+import Minio
+
 main :: IO ()
 main = do
+  minioOpts <- getStorageOpts
   opts <- welcomeGetOpts
-  simplexChatCore terminalChatConfig opts mySquaringBot
+  simplexChatCore terminalChatConfig opts uploadBot
+
 
 welcomeGetOpts :: IO ChatOpts
 welcomeGetOpts = do
   appDir <- getAppUserDataDirectory "simplex"
-  opts@ChatOpts {coreOptions = CoreChatOpts {dbFilePrefix}} <- getChatOpts appDir "simplex_bot"
-  putStrLn $ "SimpleX Chat Bot v" ++ versionNumber
+  opts@ChatOpts {coreOptions = CoreChatOpts {dbFilePrefix}} <- getChatOpts appDir "upload_bot"
+  putStrLn $ "SimpleX + Minio Upload Bot v" ++ versionNumber
   putStrLn $ "db: " <> dbFilePrefix <> "_chat.db, " <> dbFilePrefix <> "_agent.db"
   pure opts
 
-welcomeMessage :: String
-welcomeMessage = "Hello! I am a simple squaring bot.\nIf you send me a number, I will calculate its square"
+a </> b = a <> "\n" <> b
 
-mySquaringBot :: User -> ChatController -> IO ()
-mySquaringBot _user cc = do
+welcomeMessage :: String
+welcomeMessage = "Welcome to the muqadma upload bot. Upload an image or a pdf file you want to run OCR on."
+               </> "We use simplex-chat because it is not tied to an Internet Giant that farms your information. The data sent to the bot is only accessible to you and the collaborators you set."
+
+uploadBot :: User -> ChatController -> IO ()
+uploadBot _user cc = do
   initializeBotAddress cc
   race_ (forever $ void getLine) . forever $ do
     (_, _, resp) <- atomically . readTBQueue $ outputQ cc

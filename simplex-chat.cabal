@@ -575,7 +575,7 @@ executable simplex-directory-service
 executable simplex-upload-bot
   main-is: Main.hs
   other-modules:
-      Paths_simplex_chat
+      Minio
   hs-source-dirs:
       apps/simplex-upload-bot
   default-extensions:
@@ -601,6 +601,7 @@ executable simplex-upload-bot
     , http-types ==0.12.*
     , http2 >=4.2.2 && <4.3
     , memory ==0.18.*
+    , minio-hs
     , mtl >=2.3.1 && <3.0
     , network >=3.1.2.7 && <3.2
     , network-transport ==0.5.6

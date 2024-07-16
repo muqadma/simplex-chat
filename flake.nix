@@ -641,7 +641,7 @@
     exactDeps = false;
   }; in
 	pkgs.mkShell {
-          buildInputs = [ updateCmd ];
+          buildInputs = [ updateCmd pkgs.openssl ];
           shellHook = ''
             echo "welcome to the shell!"
           '';
