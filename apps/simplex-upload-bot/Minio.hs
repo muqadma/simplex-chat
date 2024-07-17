@@ -30,6 +30,7 @@ import           Options.Applicative
 import           System.FilePath.Posix
 import           UnliftIO              (throwIO, try)
 import qualified Data.Text as T
+import Data.Text (Text)
 import           Prelude
 
 -- | The following example uses minio's play server at
@@ -40,20 +41,23 @@ import           Prelude
 --
 
 data StorageOpts = StorageOpts
-  { bucket :: String
-  , endpoint :: String
-  , access_key :: String -- = Access Key obtained from HMAC Key
-  , secret :: String --  Secret obtained from HMAC Key
+  { bucket :: Text
+  , endpoint :: Text
+  , access_key :: Text -- = Access Key obtained from HMAC Key
+  , secret :: Text --  Secret obtained from HMAC Key
   }
   deriving (Generic)
 
 -- optparse-applicative package based command-line parsing.
 storageOpts :: Parser StorageOpts
 storageOpts = StorageOpts
-              <$> (strArgument (metavar "MINIO_BUCKET" <> help "the bucket name on GCS or a MinIO server"))
-              <*> (strArgument (metavar "MINIO_STORAGE_API" <> help "the endpoint to GCS or a MinIO server"))
-              <*> (strArgument (metavar "MINIO_ACCESS_KEY" <> help "the hmac-key-derived access key to GCS or a MinIO server"))
-              <*> (strArgument (metavar "MINIO_SECRET" <> help "the hmac-key-derived secret for the access key to GCS or a MinIO server"))
+              <$> (strOption (long "minio-bucket" <> metavar "MINIO_BUCKET" <> help "the bucket name on GCS or a MinIO server"))
+              <*> (strOption (long "minio-endpoint" <> metavar "MINIO_ENDPOINT" <> help "the endpoint to GCS or a MinIO server"))
+              <*> (strOption (long "minio-access_key" <> metavar "MINIO_ACCESS_KEY" <> help "the hmac-key-derived access key to GCS or a MinIO server"))
+              <*> (strOption (long "minio-secret" <> metavar "MINIO_SECRET" <> help "the hmac-key-derived secret for the access key to GCS or a MinIO server"))
+
+toConnectInfo :: StorageOpts -> ConnectInfo
+toConnectInfo = undefined
 
 getStorageOpts  = execParser $ info
             (helper <*> storageOpts)
