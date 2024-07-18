@@ -22,24 +22,44 @@ import Simplex.Chat.Terminal (terminalChatConfig)
 import Simplex.Chat.Types
 import System.Directory (getAppUserDataDirectory)
 import Text.Read
-
+import Options.Applicative
 import Minio
 import Network.Minio
 
 
 main :: IO ()
 main = do
-  minioOpts <- getStorageOpts
-  opts <- welcomeGetOpts
-  simplexChatCore terminalChatConfig opts (uploadBot (toConnectInfo minioOpts) (bucket minioOpts))
+  UploadBotOpts{_storageOpts, _chatOpts}  <- welcomeGetOpts
+  connInfo <- toConnectInfo _storageOpts
+  simplexChatCore terminalChatConfig _chatOpts (uploadBot connInfo (bucket _storageOpts))
 
 
-welcomeGetOpts :: IO ChatOpts
+data UploadBotOpts = UploadBotOpts
+  { _storageOpts :: StorageOpts
+  , _chatOpts :: ChatOpts
+  }
+
+uploadBotOpts :: FilePath -> FilePath -> Parser UploadBotOpts
+uploadBotOpts appDir defaultDBName = UploadBotOpts <$> storageOpts <*> (chatOptsP appDir defaultDBName)
+
+getUploadBotOpts :: FilePath -> FilePath -> IO UploadBotOpts
+getUploadBotOpts appDir defaultDbFileName = execParser $
+    info
+      (helper <*> versionOption <*> uploadBotOpts appDir defaultDbFileName)
+      (header versionStr <> fullDesc <> progDesc "Start chat with DB_FILE file and use SERVER as SMP server")
+  where
+    versionStr = versionString versionNumber
+    versionOption = infoOption versionAndUpdate (long "version" <> short 'v' <> help "Show version")
+    versionAndUpdate = versionStr <> "\n" <> updateStr
+
+
+welcomeGetOpts :: IO UploadBotOpts
 welcomeGetOpts = do
   appDir <- getAppUserDataDirectory "simplex"
-  opts@ChatOpts {coreOptions = CoreChatOpts {dbFilePrefix}} <- getChatOpts appDir "upload_bot"
+  opts <- getUploadBotOpts appDir "upload_bot"
   putStrLn $ "SimpleX + Minio Upload Bot v" ++ versionNumber
-  putStrLn $ "db: " <> dbFilePrefix <> "_chat.db, " <> dbFilePrefix <> "_agent.db"
+  let dbPrefix = dbFilePrefix . coreOptions . _chatOpts $ opts
+  putStrLn $ "db: " <> dbPrefix <> "_chat.db, " <> dbPrefix <> "_agent.db"
   pure opts
 
 a </> b = a <> "\n" <> b
@@ -59,6 +79,7 @@ uploadBot conn bucket _user cc = do
         contactConnected contact
         sendMessage cc contact welcomeMessage
       CRNewChatItem _ (AChatItem _ SMDRcv (DirectChat contact) ChatItem {content = rc@(CIRcvMsgContent mc)}) -> do
+        print $ "Received message from " <> contact
         case mc of
           MCText t -> printT $ "Received text message: " <> t
           MCLink {text} -> printT $ "Received link message: " <> text
@@ -67,12 +88,7 @@ uploadBot conn bucket _user cc = do
           MCVoice {text} -> printT $ "Received voice message: " <> text
           MCFile text -> printT $ "Received file message: " <> text
           MCUnknown a b c -> printT $ "Unknown message type " <> a <> b
-        let msg = T.unpack $ ciContentToText rc
-            number_ = readMaybe msg :: Maybe Integer
-        sendMessage cc contact $ case number_ of
-          Just n -> msg <> " * " <> msg <> " = " <> show (n * n)
-          _ -> "\"" <> msg <> "\" is not a number"
-      _ -> pure ()
+      a -> putStrLn $ "Received unknown message type" <> show a
   where
     printT = putStrLn . T.unpack
     contactConnected Contact {localDisplayName} = putStrLn $ T.unpack localDisplayName <> " connected"

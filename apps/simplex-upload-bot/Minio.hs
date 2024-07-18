@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE ScopedTypeVariables, DeriveGeneric #-}
+{-# LANGUAGE ScopedTypeVariables, DeriveGeneric, RecordWildCards #-}
 
 
 module Minio where
@@ -32,6 +32,7 @@ import           UnliftIO              (throwIO, try)
 import qualified Data.Text as T
 import Data.Text (Text)
 import           Prelude
+import Data.String
 
 -- | The following example uses minio's play server at
 -- https://play.min.io.  The endpoint and associated
@@ -43,8 +44,6 @@ import           Prelude
 data StorageOpts = StorageOpts
   { bucket :: Text
   , endpoint :: Text
-  , access_key :: Text -- = Access Key obtained from HMAC Key
-  , secret :: Text --  Secret obtained from HMAC Key
   }
   deriving (Generic)
 
@@ -53,18 +52,24 @@ storageOpts :: Parser StorageOpts
 storageOpts = StorageOpts
               <$> (strOption (long "minio-bucket" <> metavar "MINIO_BUCKET" <> help "the bucket name on GCS or a MinIO server"))
               <*> (strOption (long "minio-endpoint" <> metavar "MINIO_ENDPOINT" <> help "the endpoint to GCS or a MinIO server"))
-              <*> (strOption (long "minio-access_key" <> metavar "MINIO_ACCESS_KEY" <> help "the hmac-key-derived access key to GCS or a MinIO server"))
-              <*> (strOption (long "minio-secret" <> metavar "MINIO_SECRET" <> help "the hmac-key-derived secret for the access key to GCS or a MinIO server"))
 
-toConnectInfo :: StorageOpts -> ConnectInfo
-toConnectInfo = undefined
+
+toConnectInfo :: StorageOpts -> IO ConnectInfo
+toConnectInfo StorageOpts{..} = do
+  creds <- fromMinioEnv
+  case creds of
+    Nothing -> error "Creds Not loaded From Env"
+    Just c -> return $ setCreds c
+      $ setRegion "ap-southeast-1"
+      $ fromString . T.unpack $ endpoint
 
 getStorageOpts  = execParser $ info
             (helper <*> storageOpts)
             (fullDesc
              <> progDesc "FileUploader"
-             <> header
-             "FileUploader - a simple file-uploader program using minio-hs")
+             <> header "FileUploader - a simple file-uploader program using minio-hs"
+             <> forwardOptions
+            )
 
 uploadFile :: ConnectInfo -> Bucket -> FilePath -> IO (Either (FilePath, MinioErr) (FilePath, T.Text))
 uploadFile c bucket f = do
