@@ -79,7 +79,7 @@ uploadBot conn bucket _user cc = do
         contactConnected contact
         sendMessage cc contact welcomeMessage
       CRNewChatItem _ (AChatItem _ SMDRcv (DirectChat contact) ChatItem {content = rc@(CIRcvMsgContent mc)}) -> do
-        print $ "Received message from " <> contact
+        print $ "Received message from " <> (show contact)
         case mc of
           MCText t -> printT $ "Received text message: " <> t
           MCLink {text} -> printT $ "Received link message: " <> text
