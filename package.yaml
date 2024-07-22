@@ -109,6 +109,7 @@ executables:
     dependencies:
       - simplex-chat
       - minio-hs
+      - datalabTo
     other-modules:
       - Minio
     ghc-options:
