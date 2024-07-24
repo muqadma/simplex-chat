@@ -110,8 +110,11 @@ executables:
       - simplex-chat
       - minio-hs
       - datalabTo
+      - streamly
     other-modules:
       - Minio
+      - Chats
+      - Controller
     ghc-options:
       - -threaded
 

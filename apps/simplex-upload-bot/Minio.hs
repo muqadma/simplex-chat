@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE OverloadedStrings, GeneralisedNewtypeDeriving   #-}
 {-# LANGUAGE ScopedTypeVariables, DeriveGeneric, RecordWildCards #-}
 
 
@@ -95,3 +95,10 @@ mkBucket c bucket = runMinio c $ do
       Left BucketAlreadyOwnedByYou -> return ()
       Left e                       -> throwIO e
       Right _                      -> return ()
+
+
+newtype Token = Token Text
+  deriving (Generic, IsString)
+
+instance Show Token where
+  show (Token _) = "<datalab.to token>"
