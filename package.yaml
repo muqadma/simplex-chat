@@ -115,6 +115,7 @@ executables:
       - Minio
       - Chats
       - Controller
+      - OCRMigrations
     ghc-options:
       - -threaded
 
