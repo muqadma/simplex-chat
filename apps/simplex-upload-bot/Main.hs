@@ -3,7 +3,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
-
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
 module Main where
 
@@ -19,15 +19,19 @@ import Simplex.Chat.Messages.CIContent
 import Simplex.Chat.Protocol
 import Simplex.Chat.Options
 import Simplex.Chat.Terminal (terminalChatConfig)
-import Simplex.Chat.Types
+import Simplex.Chat.Types hiding (ContactRef(..))
+import qualified Simplex.Messaging.Crypto.File as CF
+import Simplex.Messaging.Agent.Protocol (UserId)
+import Simplex.Chat.Store.Files (getLocalCryptoFile)
 import System.Directory (getAppUserDataDirectory)
 import Text.Read
 import Options.Applicative
 import Minio
 import Network.Minio
 import Fast
+import Controller
 
-
+import Data.Int
 
 main :: IO ()
 main = do
@@ -95,6 +99,31 @@ firm = "Here is the membership and financial metadata of your firm."
     </> "and a link to every case."
 
 
+determineMimeType c = "unknown"
+    return "unknown"
+
+{-
+getLocalCryptoFile :: DB.Connection -> UserId -> Int64 -> Bool -> ExceptT StoreError IO CryptoFile
+getLocalCryptoFile db userId fileId sent =
+-}
+
+getCryptoFile :: UserId -> Int64 -> Bool -> CM (CF.CryptoFile)
+getCryptoFile userId fileId sent = withStore (\c -> getLocalCryptoFile c userId fileId sent)
+
+
+onNewChatItem :: MsgContent -> IO ()
+onNewChatItem (MCText text) = printT $ "Received text message: " <> text
+onNewChatItem MCLink {text} = printT $ "Received link message: " <> text
+onNewChatItem MCImage {text} = printT $ "Received image message: " <> text
+onNewChatItem MCVideo {text} = printT $ "Received video message: " <> text
+onNewChatItem MCVoice {text} = printT $ "Received voice message: " <> text
+onNewChatItem (MCFile text) = printT $ "Received file message: " <> text
+onNewChatItem (MCUnknown a b _) = printT $ "Unknown Message Content Type:\n " <> a <> "\n" <> b
+
+ocrMsgContent :: MsgContent -> IO (SharedMsgId)
+ocrMsgContent (MCText text) = printT $ "Received text message: " <> text
+
+
 uploadBot :: ConnectInfo -> Bucket -> User -> ChatController -> IO ()
 uploadBot conn bucket _user cc = do
   mkBucket conn bucket
@@ -108,15 +137,8 @@ uploadBot conn bucket _user cc = do
         contactConnected contact
         sendMessage cc contact welcomeMessage
       CRNewChatItem _ (AChatItem _ SMDRcv (DirectChat contact) ChatItem {content = rc@(CIRcvMsgContent mc)}) -> do
-        print $ "Received message from " <> (show contact)
-        case mc of
-          MCText t -> printT $ "Received text message: " <> t
-          MCLink {text} -> printT $ "Received link message: " <> text
-          MCImage {text} -> printT $ "Received image message: " <> text
-          MCVideo {text} -> printT $ "Received video message: " <> text
-          MCVoice {text} -> printT $ "Received voice message: " <> text
-          MCFile text -> printT $ "Received file message: " <> text
-          MCUnknown a b _ -> printT $ "Unknown Message Content Type:\n " <> a <> "\n" <> b
+        print $ "Direct Chat from: " <> (show $ Simplex.Chat.Types.contactId contact) <> " - with content: " <> (show mc)
+        onNewChatItem mc
       CRContactSubSummary {user = User { userId
                                        , agentUserId
                                        , userContactId
@@ -129,7 +151,15 @@ uploadBot conn bucket _user cc = do
                                        , localDisplayName
                                        }
                           , pendingSubscriptions} -> putStrLn $ "contact sub summary:" <> (show userId) <> " " <> T.unpack localDisplayName <> " " <> (show userContactId)
+      CRRcvFileDescrReady { user, chatItem } -> do
+        let ty = determineMimeType chatItem
+        path <- determineMessagePath chatItem
+        putStrLn $ "Received file of type: " <> show ty
       a -> putStrLn $ "Received unknown message type: " <> show a
   where
-    printT = putStrLn . T.unpack
     contactConnected Contact {localDisplayName} = putStrLn $ T.unpack localDisplayName <> " connected"
+    determineMessagePath c = do
+      return $ "unknown"
+
+
+printT = putStrLn . T.unpack

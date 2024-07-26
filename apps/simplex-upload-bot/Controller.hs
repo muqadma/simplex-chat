@@ -1,4 +1,4 @@
-{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE NamedFieldPuns, DeriveGeneric #-}
 
 module Controller where
 
@@ -12,6 +12,13 @@ import UnliftIO.STM
 import qualified Data.Text as T
 import Data.Tree
 import qualified Data.Map as M
+
+import qualified Data.ByteString.Lazy as BL
+
+import GHC.Generics
+
+type Port = Int
+
 
 data Store = Store
   { _chatStore :: SQLiteStore,
@@ -28,6 +35,8 @@ data MuqadmaController = MuqadmaController
   , researchChat :: ChatController
   , ocrStore :: SQLiteStore
   , ocrFilesPath :: Maybe FilePath
+  , identityStore :: SQLiteStore
+  , identityFilesPath :: Maybe FilePath
   , queues :: MuqadmaQs
   }
 
@@ -72,11 +81,28 @@ data MuqadmaQs = MuqadmaQs
   , uploadToResearch :: TBQueue ResearchEvents
   }
 
--- | This is our Controller.
 
+
+-- | This is our Controller.
 controllerStore :: ChatController -> IO Store
 controllerStore ChatController {chatStore, filesFolder, assetsDirectory, smpAgent} = do
   let _agentStore = agentClientStore smpAgent
   filesPath <- readTVarIO filesFolder
   assetsPath <- readTVarIO assetsDirectory
   pure Store {_chatStore = chatStore, _agentStore, filesPath, assetsPath}
+
+
+-- | This is our TimeStamping Server. Like in bitcoin.
+-- | More accurately, we are following the UCL TIMESEC entry
+
+data TSRequest = TSRequest
+  { content :: BL.ByteString
+  } deriving (Generic)
+
+type TSTimed = (Integer, TSRequest)
+
+data TSS = TSS
+  { networkListener :: Port -> TBQueue TSRequest -> IO ()
+  , requestTimer :: [TBQueue TSRequest] -> TBQueue TSTimed -> IO ()
+  , roundQueueCoordinator :: TBQueue TSTimed -> TBQueue TSTimed -> IO ()
+  }
