@@ -4,17 +4,22 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DisambiguateRecordFields #-}
+{-# LANGUAGE DataKinds #-}
 
 module Main where
 
 import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.Monad
+import Control.Monad.Reader.Class
+import Control.Monad.Reader
+import Control.Monad.Trans.Except
 import qualified Data.Text as T
 import Simplex.Chat.Bot
 import Simplex.Chat.Controller
 import Simplex.Chat.Core
-import Simplex.Chat.Messages
+import Simplex.Chat.Messages hiding (CIFileInfo(..))
 import Simplex.Chat.Messages.CIContent
 import Simplex.Chat.Protocol
 import Simplex.Chat.Options
@@ -30,7 +35,7 @@ import Minio
 import Network.Minio
 import Fast
 import Controller
-
+import Network.Mime
 import Data.Int
 
 main :: IO ()
@@ -99,9 +104,6 @@ firm = "Here is the membership and financial metadata of your firm."
     </> "and a link to every case."
 
 
-determineMimeType c = "unknown"
-    return "unknown"
-
 {-
 getLocalCryptoFile :: DB.Connection -> UserId -> Int64 -> Bool -> ExceptT StoreError IO CryptoFile
 getLocalCryptoFile db userId fileId sent =
@@ -120,9 +122,21 @@ onNewChatItem MCVoice {text} = printT $ "Received voice message: " <> text
 onNewChatItem (MCFile text) = printT $ "Received file message: " <> text
 onNewChatItem (MCUnknown a b _) = printT $ "Unknown Message Content Type:\n " <> a <> "\n" <> b
 
-ocrMsgContent :: MsgContent -> IO (SharedMsgId)
-ocrMsgContent (MCText text) = printT $ "Received text message: " <> text
+ocrMsgContent :: MsgContent -> Bool
+ocrMsgContent (MCText text) = False
+ocrMsgContent MCLink {text} = False
+ocrMsgContent MCImage {text, image} = True
+ocrMsgContent MCVideo {text} = False
+ocrMsgContent MCVoice {text} = False
+ocrMsgContent (MCFile _) = True
 
+encryptedFile :: UserId -> Int64 -> Bool -> CM (CF.CryptoFile)
+encryptedFile userId fileId sent = withStore $ \c -> getLocalCryptoFile c userId fileId sent
+-- CIFileInfo
+
+decryptFile :: CF.CryptoFile -> CM ()
+decryptFile (CF.CryptoFile path (Just args)) = do
+  return ()
 
 uploadBot :: ConnectInfo -> Bucket -> User -> ChatController -> IO ()
 uploadBot conn bucket _user cc = do
@@ -136,7 +150,7 @@ uploadBot conn bucket _user cc = do
       CRContactConnected _ contact _ -> do
         contactConnected contact
         sendMessage cc contact welcomeMessage
-      CRNewChatItem _ (AChatItem _ SMDRcv (DirectChat contact) ChatItem {content = rc@(CIRcvMsgContent mc)}) -> do
+      CRNewChatItem _ (AChatItem _ SMDRcv (DirectChat contact) ChatItem {content = rc@(CIRcvMsgContent mc), meta, file}) -> do
         print $ "Direct Chat from: " <> (show $ Simplex.Chat.Types.contactId contact) <> " - with content: " <> (show mc)
         onNewChatItem mc
       CRContactSubSummary {user = User { userId
@@ -151,9 +165,16 @@ uploadBot conn bucket _user cc = do
                                        , localDisplayName
                                        }
                           , pendingSubscriptions} -> putStrLn $ "contact sub summary:" <> (show userId) <> " " <> T.unpack localDisplayName <> " " <> (show userContactId)
-      CRRcvFileDescrReady { user, chatItem } -> do
-        let ty = determineMimeType chatItem
-        path <- determineMessagePath chatItem
+      CRRcvFileDescrReady { user, chatItem = ci@(AChatItem SCTDirect SMDRcv (DirectChat contact) ChatItem {content = rc@(CIRcvMsgContent mc), meta, file}) } -> do
+        let
+            User{userId} = user
+            fid :: Maybe Int64
+            fid = Simplex.Chat.Messages.fileId <$> file
+            fname :: Maybe T.Text
+            fname = T.pack . Simplex.Chat.Messages.fileName <$> file
+            ty = mimeByExt defaultMimeMap defaultMimeType <$> (fname)
+        cf <- flip runReaderT cc . runExceptT  . withStore $
+          \c -> fmap (flip (getLocalCryptoFile c userId) True) (maybe undefined pure fid)
         putStrLn $ "Received file of type: " <> show ty
       a -> putStrLn $ "Received unknown message type: " <> show a
   where

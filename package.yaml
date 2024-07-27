@@ -111,6 +111,8 @@ executables:
       - minio-hs
       - datalabTo
       - streamly
+      - mime-types
+      - transformers
     other-modules:
       - Minio
       - Chats

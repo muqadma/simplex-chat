@@ -578,6 +578,7 @@ executable simplex-upload-bot
       Minio
       Chats
       Controller
+      OCRMigrations
   hs-source-dirs:
       apps/simplex-upload-bot
   default-extensions:
@@ -604,6 +605,7 @@ executable simplex-upload-bot
     , http-types ==0.12.*
     , http2 >=4.2.2 && <4.3
     , memory ==0.18.*
+    , mime-types
     , minio-hs
     , mtl >=2.3.1 && <3.0
     , network >=3.1.2.7 && <3.2
@@ -621,6 +623,7 @@ executable simplex-upload-bot
     , terminal ==0.2.*
     , time ==1.12.*
     , tls >=1.7.0 && <1.8
+    , transformers
     , unliftio ==0.2.*
     , unliftio-core ==0.2.*
     , zip ==2.0.*
