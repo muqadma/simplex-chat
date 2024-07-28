@@ -7,6 +7,6 @@
   "https://github.com/simplex-chat/haskell-terminal.git"."f708b00009b54890172068f168bf98508ffcd495" = "0zmq7lmfsk8m340g47g5963yba7i88n4afa6z93sg9px5jv1mijj";
   "https://github.com/simplex-chat/android-support.git"."9aa09f148089d6752ce563b14c2df1895718d806" = "0pbf2pf13v2kjzi397nr13f1h3jv0imvsq8rpiyy2qyx5vd50pqn";
   "https://github.com/minio/minio-hs.git"."fd202f75df43e5bd18048e2f9106582b37d7f249" = "0ysh755bsqaijnw2bl2rixxk5b3l738hbk68rzkr20gj8bzrmxg8";
-  "https://github.com/muqadma/datalabTo-hs"."689afa3fee83b10ab9017ea87509d1ca485aa544" = "16s6lcq63wi49naj7xvsrhwwk66ikv2c236x9978xmhcsw5bgaj0";
+  "https://github.com/muqadma/datalabTo-hs"."983e71e20488eb737dfd5323b870f16ebf2debe5" = "081x6rd53ambn9b4hmwambwlk2hgwg42lkpx3mx0c32cs18jybi4";
   "https://github.com/simplex-chat/zip.git"."bd421c6b19cc4c465cd7af1f6f26169fb8ee1ebc" = "1csqfjhvc8wb5h4kxxndmb6iw7b4ib9ff2n81hrizsmnf45a6gg0";
 }

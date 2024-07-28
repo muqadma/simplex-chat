@@ -52,7 +52,7 @@ source-repository-package
 source-repository-package
     type: git
     location: https://github.com/muqadma/datalabTo-hs
-    tag: 689afa3fee83b10ab9017ea87509d1ca485aa544
+    tag: 983e71e20488eb737dfd5323b870f16ebf2debe5
 
 
 -- TODO this fork is only needed to compile with GHC 8.10.7 - it allows previous base version
