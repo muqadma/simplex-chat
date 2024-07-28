@@ -28,9 +28,6 @@ ocrStoreFile :: FilePath -> FilePath
 ocrStoreFile = (<> "_ocr.db")
 
 
-ocrDB :: FilePath -> IO DB.Connection
-ocrDB = DB.open
-
 schemaMigrations :: [(String, Query, Maybe Query)]
 schemaMigrations =
   [ ("create_ocr_documents", [sql|
