@@ -113,6 +113,7 @@ executables:
       - streamly
       - mime-types
       - transformers
+      - temporary
     other-modules:
       - Minio
       - Chats

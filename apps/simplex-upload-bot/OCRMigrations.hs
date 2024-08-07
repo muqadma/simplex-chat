@@ -13,7 +13,7 @@ import Data.Int
 
 import Simplex.Chat.Store.Files
 import Simplex.Chat.Types ()
-import Simplex.Messaging.Agent.Store.SQLite (firstRow, firstRow', maybeFirstRow, SQLiteStore, createSQLiteStore, MigrationError, MigrationConfirmation)
+import Simplex.Messaging.Agent.Store.SQLite (firstRow, firstRow', maybeFirstRow, SQLiteStore, createSQLiteStore, MigrationError, MigrationConfirmation(..))
 import qualified Simplex.Messaging.Agent.Store.SQLite.DB as DB
 import Simplex.Messaging.Agent.Store.SQLite.Migrations (Migration (..))
 import Simplex.Messaging.Agent.Protocol (UserId)
@@ -21,8 +21,9 @@ import Data.List (sortOn)
 import qualified Data.Text as T
 import Data.ByteArray (ScrubbedBytes)
 
-createOcrStore :: FilePath -> ScrubbedBytes -> Bool -> MigrationConfirmation -> IO (Either MigrationError SQLiteStore)
-createOcrStore dbPath key keepKey = createSQLiteStore dbPath key keepKey migrations
+createOcrStore :: FilePath -> ScrubbedBytes -> Bool -> IO (Either MigrationError SQLiteStore)
+createOcrStore dbPath key keepKey = do
+  createSQLiteStore dbPath key keepKey migrations (MCYesUpDown)
 
 ocrStoreFile :: FilePath -> FilePath
 ocrStoreFile = (<> "_ocr.db")
@@ -30,7 +31,7 @@ ocrStoreFile = (<> "_ocr.db")
 
 schemaMigrations :: [(String, Query, Maybe Query)]
 schemaMigrations =
-  [ ("create_ocr_documents", [sql|
+  [ ("0_create_ocr_documents", [sql|
       CREATE TABLE ocr_documents (
         ocr_id INTEGER PRIMARY KEY,
         file_id INTEGER NOT NULL,
@@ -49,7 +50,7 @@ schemaMigrations =
     |], Just [sql|
       DROP TABLE ocr_documents
     |]),
-    ("add_ocr_document_indexes", [sql|
+    ("1_add_ocr_document_indexes", [sql|
       CREATE INDEX ocr_documents_file_id ON ocr_documents (file_id);
       CREATE INDEX ocr_documents_user_id ON ocr_documents (user_id);
       CREATE INDEX ocr_documents_chat_id ON ocr_documents (chat_id);

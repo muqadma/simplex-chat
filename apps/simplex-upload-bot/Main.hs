@@ -6,16 +6,23 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE DataKinds #-}
-
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE LambdaCase #-}
 module Main where
 
 import Control.Concurrent.Async
 import Control.Concurrent.STM
+import Control.Concurrent
 import Control.Monad
 import Control.Monad.Reader.Class
 import Control.Monad.Reader
 import Control.Monad.Trans.Except
+import Data.Maybe
 import qualified Data.Text as T
+import qualified Data.ByteString.Lazy as LBS
+import qualified Data.ByteString as BS
+import Simplex.Chat (receiveFile', toFSFilePath)
+import qualified System.FilePath as FP
 import Simplex.Chat.Bot
 import Simplex.Chat.Controller
 import Simplex.Chat.Core
@@ -25,10 +32,16 @@ import Simplex.Chat.Protocol
 import Simplex.Chat.Options
 import Simplex.Chat.Terminal (terminalChatConfig)
 import Simplex.Chat.Types hiding (ContactRef(..))
+import Simplex.Chat.Markdown
 import qualified Simplex.Messaging.Crypto.File as CF
 import Simplex.Messaging.Agent.Protocol (UserId)
 import Simplex.Chat.Store.Files (getLocalCryptoFile)
-import System.Directory (getAppUserDataDirectory)
+import Simplex.Chat.Store
+import OCRMigrations
+
+import System.Directory (getAppUserDataDirectory, removeFile, createDirectoryIfMissing)
+import System.IO.Temp (withTempFile)
+import System.IO (hClose)
 import Text.Read
 import Options.Applicative
 import Minio
@@ -38,12 +51,13 @@ import Controller
 import Network.Mime
 import Data.Int
 
+
+
 main :: IO ()
 main = do
   UploadBotOpts{_ocrOpts, _storageOpts, _chatOpts}  <- welcomeGetOpts
   connInfo <- toConnectInfo _storageOpts
-  simplexChatCore terminalChatConfig _chatOpts (uploadBot connInfo (bucket _storageOpts))
-
+  simplexChatCore terminalChatConfig _chatOpts (uploadBot _ocrOpts connInfo (bucket _storageOpts))
 
 
 data UploadBotOpts = UploadBotOpts
@@ -104,14 +118,6 @@ firm = "Here is the membership and financial metadata of your firm."
     </> "and a link to every case."
 
 
-{-
-getLocalCryptoFile :: DB.Connection -> UserId -> Int64 -> Bool -> ExceptT StoreError IO CryptoFile
-getLocalCryptoFile db userId fileId sent =
--}
-
-getCryptoFile :: UserId -> Int64 -> Bool -> CM (CF.CryptoFile)
-getCryptoFile userId fileId sent = withStore (\c -> getLocalCryptoFile c userId fileId sent)
-
 
 onNewChatItem :: MsgContent -> IO ()
 onNewChatItem (MCText text) = printT $ "Received text message: " <> text
@@ -128,22 +134,33 @@ ocrMsgContent MCLink {text} = False
 ocrMsgContent MCImage {text, image} = True
 ocrMsgContent MCVideo {text} = False
 ocrMsgContent MCVoice {text} = False
-ocrMsgContent (MCFile _) = True
+ocrMsgContent (MCFile a) = True
+ocrMsgContent (MCUnknown a b _) = False
 
-encryptedFile :: UserId -> Int64 -> Bool -> CM (CF.CryptoFile)
-encryptedFile userId fileId sent = withStore $ \c -> getLocalCryptoFile c userId fileId sent
+encryptedFile' :: UserId -> Int64 -> Bool -> CM (CF.CryptoFile)
+encryptedFile' userId fileId sent = withStore $ \c -> getLocalCryptoFile c userId fileId sent
 -- CIFileInfo
 
-decryptFile :: CF.CryptoFile -> CM ()
-decryptFile (CF.CryptoFile path (Just args)) = do
-  return ()
+runCC :: forall a. ChatController -> CM a -> IO (Either ChatError a)
+runCC cc = flip runReaderT cc . runExceptT
 
-uploadBot :: ConnectInfo -> Bucket -> User -> ChatController -> IO ()
-uploadBot conn bucket _user cc = do
+encryptedFile cc u x s = runCC cc (encryptedFile' u x s)
+
+
+
+uploadBot :: Token -> ConnectInfo -> Bucket -> User -> ChatController -> IO ()
+uploadBot (Token _ocrOpts) conn bucket _user cc = do
+  store <- createOcrStore "./ocr.db" "123456" True >>= \case
+    Left e -> error $ "Error creating OCR Store: " <> show e
+    Right a -> return a
   mkBucket conn bucket
   initializeBotAddress cc
   url <- getBotURL cc
   putStrLn $ "Bot url is: " <> url
+  dir <- (\f -> f FP.</> "ocrWorkDir")
+    <$> (fromMaybe "./tmp" <$> readTVarIO (filesFolder cc))
+  createDirectoryIfMissing True dir
+  print $ "OCR Dir is: " <> dir
   race_ (forever $ void getLine) . forever $ do
     (_, _, resp) <- atomically . readTBQueue $ outputQ cc
     case resp of
@@ -151,36 +168,99 @@ uploadBot conn bucket _user cc = do
         contactConnected contact
         sendMessage cc contact welcomeMessage
       CRNewChatItem _ (AChatItem _ SMDRcv (DirectChat contact) ChatItem {content = rc@(CIRcvMsgContent mc), meta, file}) -> do
+        print $ file
         print $ "Direct Chat from: " <> (show $ Simplex.Chat.Types.contactId contact) <> " - with content: " <> (show mc)
         onNewChatItem mc
       CRContactSubSummary {user = User { userId
-                                       , agentUserId
                                        , userContactId
                                        , localDisplayName
                                        }
-                          , contactSubscriptions} -> putStrLn $ "contact sub summary:" <> (show userId) <> " " <> T.unpack localDisplayName <> " " <> (show userContactId)
+                          } -> putStrLn $ "contact sub summary:" <> (show userId) <> " " <> T.unpack localDisplayName <> " " <> (show userContactId)
+      CRUserContactSubSummary {user = User { userId
+                                           , userContactId
+                                           , localDisplayName
+                                           }
+                          } -> putStrLn $ "contact user sub summary:" <> (show userId) <> " " <> T.unpack localDisplayName <> " " <> (show userContactId)
       CRPendingSubSummary {user = User { userId
-                                       , agentUserId
                                        , userContactId
                                        , localDisplayName
                                        }
-                          , pendingSubscriptions} -> putStrLn $ "contact sub summary:" <> (show userId) <> " " <> T.unpack localDisplayName <> " " <> (show userContactId)
-      CRRcvFileDescrReady { user, chatItem = ci@(AChatItem SCTDirect SMDRcv (DirectChat contact) ChatItem {content = rc@(CIRcvMsgContent mc), meta, file}) } -> do
+                          } -> putStrLn $ "contact sub summary:" <> (show userId) <> " " <> T.unpack localDisplayName <> " " <> (show userContactId)
+      CRRcvFileDescrReady { user, chatItem, rcvFileTransfer, rcvFileDescr } -> do
+        (either print print) =<< (runCC cc $ receiveFile' user rcvFileTransfer False Nothing Nothing)
+      CRRcvFileAccepted { user, chatItem } -> do
+        print $ "recieve file accepted"
+      CRRcvFileStart { user, chatItem } -> do
+        print $ "recieve file started"
+      CRRcvFileProgressXFTP { user, chatItem_, receivedSize, totalSize, rcvFileTransfer  } -> do
+        print $ "recieve file progress"
+      CRRcvFileComplete { user, chatItem=(AChatItem _ SMDRcv (DirectChat contact) ChatItem {content = rc@(CIRcvMsgContent mc), meta, file}) } -> do
         let
             User{userId} = user
-            fid :: Maybe Int64
-            fid = Simplex.Chat.Messages.fileId <$> file
-            fname :: Maybe T.Text
-            fname = T.pack . Simplex.Chat.Messages.fileName <$> file
-            ty = mimeByExt defaultMimeMap defaultMimeType <$> (fname)
-        cf <- flip runReaderT cc . runExceptT  . withStore $
-          \c -> fmap (flip (getLocalCryptoFile c userId) True) (maybe undefined pure fid)
-        putStrLn $ "Received file of type: " <> show ty
+            fid' :: Maybe Int64
+            fid' = Simplex.Chat.Messages.fileId <$> file
+            fname' :: Maybe T.Text
+            fname' = T.pack . Simplex.Chat.Messages.fileName <$> file
+            ty' = mimeByExt defaultMimeMap defaultMimeType <$> fname'
+        case (,,) <$> fid' <*> fname' <*> ty' of
+          Just (fi, fname, ty) -> do
+            m' <- awaitCompletion dir userId fi fname ty
+            case m' of
+              Nothing -> print "Fuck why is there no markdown"
+              Just m -> do
+                print "Sending Message"
+                mapM (sendMessage cc contact . T.unpack) (splitMessages m)
+                print "Sent Message"
+          Nothing -> do
+            print "No File exists for ChatItem"
       a -> putStrLn $ "Received unknown message type: " <> show a
   where
+    splitMessages :: T.Text -> [T.Text]
+    splitMessages = T.chunksOf maxEncodedMsgLength
+    awaitCompletion :: FilePath -> UserId -> Int64 -> T.Text -> BS.ByteString -> IO (Maybe T.Text)
+    awaitCompletion dir userId fi fname ty = do
+      cf <- encryptedFile cc userId fi False
+      case cf of
+        Left e -> do
+          print $ "Error opening encrypted file" <> show e
+          return Nothing
+        Right (CF.CryptoFile filePath cfArgs) -> do
+          liftIO $ putStrLn $ "Received file of type: " <> show ty
+          bs <- runExceptT $ do
+            fsFilePath <- Control.Monad.Reader.lift . (flip runReaderT) cc $ toFSFilePath filePath
+            let src = CF.CryptoFile fsFilePath cfArgs
+            CF.readFile src
+          case bs of
+            Left e -> (print $ "Error decrypting file: " <> show e) >> return Nothing
+            Right contentBS -> doOCR dir fi fname ty contentBS
     contactConnected Contact {localDisplayName} = putStrLn $ T.unpack localDisplayName <> " connected"
-    determineMessagePath c = do
-      return $ "unknown"
-
+    doOCR :: FilePath -> Int64 -> T.Text -> BS.ByteString -> LBS.ByteString -> IO (Maybe T.Text)
+    doOCR dir fileId fileName mimeType content = do
+      withTempFile dir (T.unpack fileName) $ \ (f :: FilePath) h -> do
+        print "In withTmpFile"
+        BS.hPut h (BS.toStrict $ content)
+        hClose h
+        c <- withConfig _ocrOpts $ flip marker' f
+        case c of
+          Nothing -> do
+            putStrLn "No Marker Response!"
+            return Nothing
+          Just (MarkerFinalResponse status markdown images meta success err npages) -> do
+            let actualErr = case err of
+                              Just "" -> Nothing
+                              Just e -> Just e
+                              Nothing -> Nothing
+            case actualErr of
+              Just e -> do
+                putStrLn $ "Error: " <> show e
+                return markdown
+              Nothing -> do
+                putStrLn $ "Success!"
+                putStrLn $ "Meta: " <> show meta
+                putStrLn $ "Status: " <> show status
+                putStr $ "Pages: " <> show markdown
+                putStrLn $ "Success: " <> show success
+                putStrLn $ "Number of Pages: " <> show npages
+                return $ markdown
 
 printT = putStrLn . T.unpack
