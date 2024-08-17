@@ -10,16 +10,26 @@ import SwiftUI
 import SimpleXChat
 import CodeScanner
 import AVFoundation
+import SimpleXChat
 
 struct SomeAlert: Identifiable {
     var alert: Alert
     var id: String
 }
 
+struct SomeActionSheet: Identifiable {
+    var actionSheet: ActionSheet
+    var id: String
+}
+
+struct SomeSheet<Content: View>: Identifiable {
+    @ViewBuilder var content: Content
+    var id: String
+}
+
 private enum NewChatViewAlert: Identifiable {
     case planAndConnectAlert(alert: PlanAndConnectAlert)
     case newChatSomeAlert(alert: SomeAlert)
-
     var id: String {
         switch self {
         case let .planAndConnectAlert(alert): return "planAndConnectAlert \(alert.id)"
@@ -37,6 +47,7 @@ enum NewChatOption: Identifiable {
 
 struct NewChatView: View {
     @EnvironmentObject var m: ChatModel
+    @EnvironmentObject var theme: AppTheme
     @State var selection: NewChatOption
     @State var showQRCodeScanner = false
     @State private var invitationUsed: Bool = false
@@ -45,22 +56,10 @@ struct NewChatView: View {
     @State private var creatingConnReq = false
     @State private var pastedLink: String = ""
     @State private var alert: NewChatViewAlert?
+    @Binding var parentAlert: SomeAlert?
 
     var body: some View {
         VStack(alignment: .leading) {
-            HStack {
-                Text("New chat")
-                    .font(.largeTitle)
-                    .bold()
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer()
-                InfoSheetButton {
-                    AddContactLearnMore(showTitle: true)
-                }
-            }
-            .padding()
-            .padding(.top)
-
             Picker("New chat", selection: $selection) {
                 Label("Add contact", systemImage: "link")
                     .tag(NewChatOption.invite)
@@ -86,10 +85,11 @@ struct NewChatView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .modifier(ThemedBackground(grouped: true))
             .background(
                 // Rectangle is needed for swipe gesture to work on mostly empty views (creatingLinkProgressView and retryButton)
                 Rectangle()
-                    .fill(Color(uiColor: .systemGroupedBackground))
+                    .fill(theme.base == DefaultTheme.LIGHT ? theme.colors.background.asGroupedBackground(theme.base.mode) : theme.colors.background)
             )
             .animation(.easeInOut(duration: 0.3333), value: selection)
             .gesture(DragGesture(minimumDistance: 20.0, coordinateSpace: .local)
@@ -108,7 +108,14 @@ struct NewChatView: View {
                 }
             )
         }
-        .background(Color(.systemGroupedBackground))
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                InfoSheetButton {
+                    AddContactLearnMore(showTitle: true)
+                }
+            }
+        }
+        .modifier(ThemedBackground(grouped: true))
         .onChange(of: invitationUsed) { used in
             if used && !(m.showingInvitation?.connChatUsed ?? true) {
                 m.markShowingInvitationUsed()
@@ -117,19 +124,22 @@ struct NewChatView: View {
         .onDisappear {
             if !(m.showingInvitation?.connChatUsed ?? true),
                let conn = contactConnection {
-                AlertManager.shared.showAlert(Alert(
-                    title: Text("Keep unused invitation?"),
-                    message: Text("You can view invitation link again in connection details."),
-                    primaryButton: .default(Text("Keep")) {},
-                    secondaryButton: .destructive(Text("Delete")) {
-                        Task {
-                            await deleteChat(Chat(
-                                chatInfo: .contactConnection(contactConnection: conn),
-                                chatItems: []
-                            ))
+                parentAlert = SomeAlert(
+                    alert: Alert(
+                        title: Text("Keep unused invitation?"),
+                        message: Text("You can view invitation link again in connection details."),
+                        primaryButton: .default(Text("Keep")) {},
+                        secondaryButton: .destructive(Text("Delete")) {
+                            Task {
+                                await deleteChat(Chat(
+                                    chatInfo: .contactConnection(contactConnection: conn),
+                                    chatItems: []
+                                ))
+                            }
                         }
-                    }
-                ))
+                    ),
+                    id: "keepUnusedInvitation"
+                )
             }
             m.showingInvitation = nil
         }
@@ -202,6 +212,7 @@ struct NewChatView: View {
 
 private struct InviteView: View {
     @EnvironmentObject var chatModel: ChatModel
+    @EnvironmentObject var theme: AppTheme
     @Binding var invitationUsed: Bool
     @Binding var contactConnection: PendingContactConnection?
     var connReqInvitation: String
@@ -209,7 +220,7 @@ private struct InviteView: View {
 
     var body: some View {
         List {
-            Section("Share this 1-time invite link") {
+            Section(header: Text("Share this 1-time invite link").foregroundColor(theme.colors.secondary)) {
                 shareLinkView()
             }
             .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 10))
@@ -220,6 +231,7 @@ private struct InviteView: View {
                 IncognitoToggle(incognitoEnabled: $incognitoDefault)
             } footer: {
                 sharedProfileInfo(incognitoDefault)
+                    .foregroundColor(theme.colors.secondary)
             }
         }
         .onChange(of: incognitoDefault) { incognito in
@@ -256,7 +268,7 @@ private struct InviteView: View {
     }
 
     private func qrCodeView() -> some View {
-        Section("Or show this code") {
+        Section(header: Text("Or show this code").foregroundColor(theme.colors.secondary)) {
             SimpleXLinkQRCode(uri: connReqInvitation, onShare: setInvitationUsed)
                 .padding()
                 .background(
@@ -279,6 +291,7 @@ private struct InviteView: View {
 
 private struct ConnectView: View {
     @Environment(\.dismiss) var dismiss: DismissAction
+    @EnvironmentObject var theme: AppTheme
     @Binding var showQRCodeScanner: Bool
     @Binding var pastedLink: String
     @Binding var alert: NewChatViewAlert?
@@ -286,10 +299,10 @@ private struct ConnectView: View {
 
     var body: some View {
         List {
-            Section("Paste the link you received") {
+            Section(header: Text("Paste the link you received").foregroundColor(theme.colors.secondary)) {
                 pasteLinkView()
             }
-            Section("Or scan QR code") {
+            Section(header: Text("Or scan QR code").foregroundColor(theme.colors.secondary)) {
                 ScannerInView(showQRCodeScanner: $showQRCodeScanner, processQRCode: processQRCode)
             }
         }
@@ -483,6 +496,7 @@ func strHasSingleSimplexLink(_ str: String) -> FormattedText? {
 }
 
 struct IncognitoToggle: View {
+    @EnvironmentObject var theme: AppTheme
     @Binding var incognitoEnabled: Bool
     @State private var showIncognitoSheet = false
 
@@ -490,13 +504,13 @@ struct IncognitoToggle: View {
         ZStack(alignment: .leading) {
             Image(systemName: incognitoEnabled ? "theatermasks.fill" : "theatermasks")
                 .frame(maxWidth: 24, maxHeight: 24, alignment: .center)
-                .foregroundColor(incognitoEnabled ? Color.indigo : .secondary)
+                .foregroundColor(incognitoEnabled ? Color.indigo : theme.colors.secondary)
                 .font(.system(size: 14))
             Toggle(isOn: $incognitoEnabled) {
                 HStack(spacing: 6) {
                     Text("Incognito")
                     Image(systemName: "info.circle")
-                        .foregroundColor(.accentColor)
+                        .foregroundColor(theme.colors.primary)
                         .font(.system(size: 14))
                 }
                 .onTapGesture {
@@ -831,7 +845,10 @@ private func connectContactViaAddress_(_ contact: Contact, dismiss: Bool, incogn
                 dismissAllSheets(animated: true)
             }
         }
-        _ = await connectContactViaAddress(contact.contactId, incognito)
+        let ok = await connectContactViaAddress(contact.contactId, incognito, showAlert: { AlertManager.shared.showAlert($0) })
+        if ok {
+            AlertManager.shared.showAlert(connReqSentAlert(.contact))
+        }
         cleanup?()
     }
 }
@@ -881,11 +898,11 @@ func openKnownContact(_ contact: Contact, dismiss: Bool, showAlreadyExistsAlert:
             DispatchQueue.main.async {
                 if dismiss {
                     dismissAllSheets(animated: true) {
-                        m.chatId = c.id
+                        ItemsModel.shared.loadOpenChat(c.id)
                         showAlreadyExistsAlert?()
                     }
                 } else {
-                    m.chatId = c.id
+                    ItemsModel.shared.loadOpenChat(c.id)
                     showAlreadyExistsAlert?()
                 }
             }
@@ -900,11 +917,11 @@ func openKnownGroup(_ groupInfo: GroupInfo, dismiss: Bool, showAlreadyExistsAler
             DispatchQueue.main.async {
                 if dismiss {
                     dismissAllSheets(animated: true) {
-                        m.chatId = g.id
+                        ItemsModel.shared.loadOpenChat(g.id)
                         showAlreadyExistsAlert?()
                     }
                 } else {
-                    m.chatId = g.id
+                    ItemsModel.shared.loadOpenChat(g.id)
                     showAlreadyExistsAlert?()
                 }
             }
@@ -955,8 +972,13 @@ func connReqSentAlert(_ type: ConnReqType) -> Alert {
     )
 }
 
-#Preview {
-    NewChatView(
-        selection: .invite
-    )
+struct NewChatView_Previews: PreviewProvider {
+    static var previews: some View {
+        @State var parentAlert: SomeAlert?
+
+        NewChatView(
+            selection: .invite,
+            parentAlert: $parentAlert
+        )
+    }
 }
