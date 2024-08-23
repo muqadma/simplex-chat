@@ -3,7 +3,9 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE OverloadedLists #-}
+
 
 module Simplex.Chat.Bot where
 
@@ -55,6 +57,22 @@ initializeBotAddress' logAddress cc = do
     showBotAddress uri = do
       when logAddress $ putStrLn $ "Bot's contact address is: " <> B.unpack (strEncode uri)
       void $ sendChatCmd cc $ AddressAutoAccept $ Just AutoAccept {acceptIncognito = False, autoReply = Nothing}
+
+getBotURL :: ChatController -> IO String
+getBotURL cc = do
+  sendChatCmd cc ShowMyAddress >>= \case
+    CRUserContactLink _ UserContactLink {connReqContact} -> pure $ botUrl connReqContact
+    CRChatCmdError _ (ChatErrorStore SEUserContactLinkNotFound) -> do
+      putStrLn "No bot address, creating..."
+      sendChatCmd cc CreateMyAddress >>= \case
+        CRUserContactLinkCreated _ uri -> pure $ botUrl uri
+        _ -> putStrLn "can't create bot address" >> exitFailure
+    _ -> putStrLn "unexpected response" >> exitFailure
+  where
+    botAddress uri = B.unpack (strEncode uri)
+    botUrl uri = T.unpack $ T.replace "simplex:/" "https://simplex.chat/" (T.pack $ botAddress uri)
+
+
 
 sendMessage :: ChatController -> Contact -> String -> IO ()
 sendMessage cc ct = sendComposedMessage cc ct Nothing . textMsgContent

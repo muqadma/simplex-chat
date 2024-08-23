@@ -103,6 +103,25 @@ executables:
     ghc-options:
       - -threaded
 
+  simplex-upload-bot:
+    source-dirs: apps/simplex-upload-bot
+    main: Main.hs
+    dependencies:
+      - simplex-chat
+      - minio-hs
+      - datalabTo
+      - streamly
+      - mime-types
+      - transformers
+      - temporary
+    other-modules:
+      - Minio
+      - Chats
+      - Controller
+      - OCRMigrations
+    ghc-options:
+      - -threaded
+
   simplex-broadcast-bot:
     source-dirs:
       - apps/simplex-broadcast-bot

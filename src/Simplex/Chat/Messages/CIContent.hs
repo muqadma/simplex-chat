@@ -118,6 +118,9 @@ ciDeleteModeToText = \case
 -- ! to avoid breaking cross-platform compatibility, see RcvGroupEvent and SndGroupEvent
 data CIContent (d :: MsgDirection) where
   CISndMsgContent :: MsgContent -> CIContent 'MDSnd
+
+
+
   CIRcvMsgContent :: MsgContent -> CIContent 'MDRcv
   CISndDeleted :: CIDeleteMode -> CIContent 'MDSnd -- legacy - since v4.3.0 item_deleted field is used
   CIRcvDeleted :: CIDeleteMode -> CIContent 'MDRcv -- legacy - since v4.3.0 item_deleted field is used

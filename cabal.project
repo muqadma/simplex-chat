@@ -44,6 +44,17 @@ source-repository-package
     location: https://github.com/simplex-chat/android-support.git
     tag: 9aa09f148089d6752ce563b14c2df1895718d806
 
+source-repository-package
+    type: git
+    location: https://github.com/minio/minio-hs.git
+    tag: fd202f75df43e5bd18048e2f9106582b37d7f249
+
+source-repository-package
+    type: git
+    location: https://github.com/muqadma/datalabTo-hs
+    tag: 983e71e20488eb737dfd5323b870f16ebf2debe5
+
+
 -- TODO this fork is only needed to compile with GHC 8.10.7 - it allows previous base version
 source-repository-package
     type: git
